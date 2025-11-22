@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from crawler import RecursiveCrawler
+from url_discovery import discover_urls
 import hashlib
 
 load_dotenv()
@@ -31,12 +32,47 @@ def ingest(url, max_depth=2, crawl_id=None, crawl_status=None):
     
     # Update status
     if crawl_status and crawl_id:
-        crawl_status[crawl_id]['progress']['stage'] = 'crawling'
+        crawl_status[crawl_id]['progress']['stage'] = 'url_discovery'
     
-    # Crawl
-    print("🕷️  Phase 1: Crawling website...")
-    crawler = RecursiveCrawler(url, max_depth=max_depth, max_pages=2000)
-    docs = crawler.start()
+    # Phase 1: Fast URL Discovery
+    print("=" * 60)
+    print("🔍 PHASE 1: URL DISCOVERY (Fast Async Crawl)")
+    print("=" * 60)
+    
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc.replace('www.', '')
+    
+    seed_urls = [
+        url,
+        "https://www.kluniversity.in/cse1/default.aspx",
+        "https://www.kluniversity.in/ece1/default.aspx",
+        "https://www.kluniversity.in/mech1/default.aspx",
+        "https://www.kluniversity.in/civil1/default.aspx",
+        "https://www.kluniversity.in/eee1/default.aspx",
+    ]
+    
+    discovered_urls = discover_urls(seed_urls, domain, max_urls=5000)
+    print(f"\n📊 Discovered {len(discovered_urls)} unique URLs")
+    
+    if crawl_status and crawl_id:
+        crawl_status[crawl_id]['progress']['stage'] = 'content_extraction'
+    
+    # Phase 2: Content Extraction
+    print("\n" + "=" * 60)
+    print("📄 PHASE 2: CONTENT EXTRACTION (Detailed Scraping)")
+    print("=" * 60)
+    
+    crawler = RecursiveCrawler(url, max_depth=1, max_pages=5000)
+    
+    print(f"\nExtracting content from {len(discovered_urls)} URLs...")
+    for i, discovered_url in enumerate(discovered_urls, 1):
+        if len(crawler.documents) >= 5000:
+            break
+        if i % 100 == 0:
+            print(f"  Progress: {i}/{len(discovered_urls)} URLs processed")
+        crawler.crawl(discovered_url, depth=0)
+    
+    docs = crawler.documents
     
     if not docs:
         print("❌ No documents found.")
