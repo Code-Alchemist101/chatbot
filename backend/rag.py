@@ -31,9 +31,9 @@ vector_store = PineconeVectorStore(
 )
 
 # Initialize LLM with better parameters
-# Using gemini-1.5-flash as gemini-pro is deprecated/404
+# Using gemini-2.0-flash as it is available in the user's account
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash", 
+    model="gemini-2.0-flash", 
     google_api_key=GOOGLE_API_KEY, 
     temperature=0.3,  # Lower temperature for more focused answers
     max_output_tokens=1024  # Limit response length

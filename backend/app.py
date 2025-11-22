@@ -1,3 +1,17 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from datetime import datetime, timezone
+import threading
+import time
+from db import db
+from rag import get_answer
+from ingest import ingest
+
+# Initialize Flask app
+app = Flask(__name__)
+CORS(app)
+
+# Global crawl status tracker
 crawl_status = {}
 
 @app.route('/api/health', methods=['GET'])

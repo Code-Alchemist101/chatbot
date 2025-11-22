@@ -31,6 +31,19 @@ class RecursiveCrawler:
         self.session.mount("https://", adapter)
         
         # Set proper headers
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        
+        # Create log file
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.log_file = f"crawl_log_{timestamp}.txt"
+        
+        with open(self.log_file, 'w', encoding='utf-8') as f:
+            f.write(f"Crawl Log - {datetime.now()}\n")
+            f.write(f"Base URL: {base_url}\n")
+            f.write(f"Max Depth: {max_depth}\n")
+            f.write(f"Max Pages: {max_pages}\n")
             f.write("="*60 + "\n\n")
 
     def log_to_file(self, message):
