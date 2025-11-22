@@ -1,14 +1,12 @@
 flask
 flask-cors
 pymongo
-langchain-google-genai
-langchain-pinecone
 python-dotenv
 beautifulsoup4
 requests
 langchain
-urllib3
+langchain-google-genai
+langchain-pinecone
 langchain-huggingface
 langchain-text-splitters
 sentence-transformers
-pinecone-client

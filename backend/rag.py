@@ -19,7 +19,7 @@ if not GOOGLE_API_KEY:
 if not PINECONE_API_KEY or not PINECONE_INDEX:
     raise ValueError("Missing PINECONE_API_KEY or PINECONE_INDEX in .env")
 
-# Initialize Embeddings (Local HuggingFace - Matches Ingestion)
+# Initialize Embeddings
 print("📥 Loading local embedding model (all-mpnet-base-v2)...")
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 
@@ -30,17 +30,16 @@ vector_store = PineconeVectorStore(
     pinecone_api_key=PINECONE_API_KEY
 )
 
-# Initialize LLM with better parameters
-# Using gemini-2.0-flash as it is available in the user's account
+# Initialize LLM
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.0-flash", 
     google_api_key=GOOGLE_API_KEY, 
-    temperature=0.3,  # Lower temperature for more focused answers
-    max_output_tokens=1024  # Limit response length
+    temperature=0.3,
+    max_output_tokens=1024
 )
 
-# Enhanced RAG Prompt
-template = """You are a helpful AI assistant for a university website. Answer the question based on the provided context.
+# RAG Prompt
+template = """You are a helpful AI assistant for KL University. Answer the question based on the provided context with specific details.
 
 Context from the university website:
 {context}
@@ -48,11 +47,12 @@ Context from the university website:
 Question: {question}
 
 Instructions:
-- Provide accurate, helpful information based on the context
+- Provide SPECIFIC and DETAILED information based on the context
+- Include names, email addresses, phone numbers, and other precise details when available
 - If the context doesn't contain relevant information, say "I don't have specific information about that in my knowledge base."
 - Be concise but complete
 - Use a friendly, professional tone
-- If the question is about admissions, courses, faculty, or campus, prioritize that information
+- Prioritize factual accuracy over general statements
 
 Answer:"""
 
@@ -67,18 +67,15 @@ def format_docs(docs):
     for i, doc in enumerate(docs, 1):
         source = doc.metadata.get('source', 'Unknown')
         title = doc.metadata.get('title', '')
-        content = doc.page_content[:500]  # Limit content per doc
-        
+        content = doc.page_content[:800]
         formatted.append(f"[Source {i}: {title}]\n{content}...")
     
     return "\n\n".join(formatted)
 
-# Create retriever with better parameters
+# Create retriever
 retriever = vector_store.as_retriever(
     search_type="similarity",
-    search_kwargs={
-        "k": 5  # Retrieve top 5 most relevant documents
-    }
+    search_kwargs={"k": 8}
 )
 
 # RAG Chain
@@ -101,7 +98,6 @@ def get_answer(question, max_retries=3):
         try:
             answer = rag_chain.invoke(question)
             
-            # Validate answer
             if not answer or len(answer.strip()) < 10:
                 return "I couldn't generate a complete answer. Please try asking in a different way."
             
@@ -114,7 +110,6 @@ def get_answer(question, max_retries=3):
             
             print(f"RAG Error (attempt {retry_count}/{max_retries}): {type(e).__name__}")
             
-            # Check for rate limits
             if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
                 if retry_count < max_retries:
                     wait_time = 2 ** retry_count
@@ -122,29 +117,8 @@ def get_answer(question, max_retries=3):
                     time.sleep(wait_time)
                     continue
             
-            # For other errors, short delay before retry
             if retry_count < max_retries:
                 time.sleep(1)
     
-    # All retries failed
     print(f"All retries failed. Last error: {last_error}")
     return "I'm currently experiencing technical difficulties. Please try again in a moment."
-
-def test_rag():
-    """Test function"""
-    print("Testing RAG system...")
-    
-    test_questions = [
-        "What courses are offered?",
-        "Tell me about the campus facilities",
-        "How can I apply for admission?"
-    ]
-    
-    for question in test_questions:
-        print(f"\n\nQuestion: {question}")
-        print("-" * 50)
-        answer = get_answer(question)
-        print(f"Answer: {answer}")
-
-if __name__ == "__main__":
-    test_rag()

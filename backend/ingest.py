@@ -72,8 +72,8 @@ def ingest(url, max_depth=2, crawl_id=None, crawl_status=None):
     
     print("\n✂️  Splitting documents into chunks...")
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
+        chunk_size=500,  # Smaller chunks for more precise information
+        chunk_overlap=100,  # More overlap to preserve context
         length_function=len,
         is_separator_regex=False,
     )

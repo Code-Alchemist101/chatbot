@@ -9,7 +9,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 class RecursiveCrawler:
-    def __init__(self, base_url, max_depth=2, max_pages=2000):
+    def __init__(self, base_url, max_depth=4, max_pages=5000):
         self.base_url = base_url
         self.domain = urlparse(base_url).netloc
         self.max_depth = max_depth
@@ -17,7 +17,7 @@ class RecursiveCrawler:
         self.visited = set()
         self.documents = []
         self.error_count = 0
-        self.max_errors = 50
+        self.max_errors = 100
         
         # Create session with retry strategy
         self.session = requests.Session()
@@ -30,7 +30,6 @@ class RecursiveCrawler:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
         
-        # Set proper headers
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
@@ -57,12 +56,9 @@ class RecursiveCrawler:
         try:
             parsed = urlparse(url)
             
-            # Check if same domain or subdomain
-            if not (parsed.netloc == self.domain or 
-                    parsed.netloc.endswith('.' + self.domain)):
+            if not (parsed.netloc == self.domain or parsed.netloc.endswith('.' + self.domain)):
                 return False
             
-            # Skip common non-content URLs
             skip_patterns = [
                 r'/login', r'/logout', r'/signin', r'/signup',
                 r'/admin', r'/api/', r'/wp-admin',
@@ -83,32 +79,20 @@ class RecursiveCrawler:
             return False
 
     def normalize_url(self, url):
-        """Remove fragments and normalize URL"""
         url, _ = urldefrag(url)
         return url.rstrip('/')
 
     def extract_text_from_soup(self, soup):
-        """Extract clean text from BeautifulSoup object"""
-        # Remove unwanted elements
-        for element in soup(['script', 'style', 'nav', 'footer', 
-                            'header', 'aside', 'iframe', 'noscript']):
+        for element in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'iframe', 'noscript']):
             element.decompose()
         
-        # Get text
         text = soup.get_text(separator='\n', strip=True)
-        
-        # Clean up whitespace
         lines = [line.strip() for line in text.splitlines() if line.strip()]
-        text = '\n'.join(lines)
-        
-        return text
+        return '\n'.join(lines)
 
     def crawl(self, url, depth=0):
-        # Check limits
-        if (depth > self.max_depth or 
-            url in self.visited or 
-            len(self.documents) >= self.max_pages or
-            self.error_count >= self.max_errors):
+        if (depth > self.max_depth or url in self.visited or 
+            len(self.documents) >= self.max_pages or self.error_count >= self.max_errors):
             return
 
         url = self.normalize_url(url)
@@ -124,49 +108,26 @@ class RecursiveCrawler:
             response = self.session.get(url, timeout=15, allow_redirects=True)
             
             if response.status_code != 200:
-                error_msg = f"Failed to fetch {url}: Status {response.status_code}"
-                print(f"⚠️  {error_msg}")
-                self.log_to_file(f"[ERROR] {error_msg}")
+                self.log_to_file(f"[ERROR] Failed to fetch {url}: Status {response.status_code}")
                 self.error_count += 1
                 return
 
-            # Check content type
             content_type = response.headers.get('Content-Type', '').lower()
-            if not any(t in content_type for t in ['text/html', 'text/plain', 
-                                                     'application/xhtml']):
-                skip_msg = f"Skipping non-HTML: {url} ({content_type})"
-                self.log_to_file(f"[SKIPPED] {skip_msg}")
+            if not any(t in content_type for t in ['text/html', 'text/plain', 'application/xhtml']):
+                self.log_to_file(f"[SKIPPED] Non-HTML: {url}")
                 return
 
             soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Extract text content
             text = self.extract_text_from_soup(soup)
             
-            # Validate content size
-            if len(text) > 1_000_000:
-                skip_msg = f"Skipping oversized content: {url} ({len(text)} chars)"
-                print(f"⏭️  {skip_msg}")
-                self.log_to_file(f"[SKIPPED] {skip_msg}")
+            if len(text) > 1_000_000 or len(text) < 100:
+                self.log_to_file(f"[SKIPPED] Invalid size: {url} ({len(text)} chars)")
                 return
             
-            if len(text) < 100:
-                skip_msg = f"Skipping minimal content: {url} ({len(text)} chars)"
-                self.log_to_file(f"[SKIPPED] {skip_msg}")
-                return
-            
-            # Get page title
-            title = ""
-            if soup.title and soup.title.string:
-                title = soup.title.string.strip()
-            
-            # Get meta description
-            description = ""
+            title = soup.title.string.strip() if soup.title and soup.title.string else ""
             meta_desc = soup.find('meta', attrs={'name': 'description'})
-            if meta_desc and meta_desc.get('content'):
-                description = meta_desc['content'].strip()
+            description = meta_desc['content'].strip() if meta_desc and meta_desc.get('content') else ""
             
-            # Create Document
             self.documents.append(Document(
                 page_content=text,
                 metadata={
@@ -178,45 +139,22 @@ class RecursiveCrawler:
                 }
             ))
             
-            success_msg = f"✓ Scraped: {url} ({len(text)} chars, {len(self.documents)}/{self.max_pages})"
-            print(success_msg)
-            self.log_to_file(f"[SUCCESS] {success_msg}")
+            print(f"✓ Scraped: {url} ({len(text)} chars, {len(self.documents)}/{self.max_pages})")
+            self.log_to_file(f"[SUCCESS] {url}")
 
-            # Rate limiting
             time.sleep(0.5)
 
-            # Find and crawl links (only if we haven't hit the page limit)
             if len(self.documents) < self.max_pages and depth < self.max_depth:
                 links = soup.find_all('a', href=True)
-                print(f"  Found {len(links)} links to process")
-                
                 for link in links:
                     if len(self.documents) >= self.max_pages:
                         break
-                        
-                    href = link['href']
-                    full_url = urljoin(url, href)
-                    full_url = self.normalize_url(full_url)
-                    
+                    full_url = self.normalize_url(urljoin(url, link['href']))
                     if full_url not in self.visited and self.is_valid_url(full_url):
                         self.crawl(full_url, depth + 1)
                     
-        except requests.exceptions.Timeout:
-            error_msg = f"Timeout fetching {url}"
-            print(f"⏱️  {error_msg}")
-            self.log_to_file(f"[ERROR] {error_msg}")
-            self.error_count += 1
-            
-        except requests.exceptions.TooManyRedirects:
-            error_msg = f"Too many redirects: {url}"
-            print(f"🔄 {error_msg}")
-            self.log_to_file(f"[ERROR] {error_msg}")
-            self.error_count += 1
-            
         except Exception as e:
-            error_msg = f"Error crawling {url}: {type(e).__name__}: {str(e)}"
-            print(f"✗ {error_msg}")
-            self.log_to_file(f"[ERROR] {error_msg}")
+            self.log_to_file(f"[ERROR] {url}: {type(e).__name__}")
             self.error_count += 1
 
     def start(self):
@@ -227,18 +165,12 @@ class RecursiveCrawler:
         
         self.log_to_file(f"\n{'='*60}")
         self.log_to_file(f"Crawl completed at {datetime.now()}")
-        self.log_to_file(f"Total pages crawled: {len(self.documents)}")
+        self.log_to_file(f"Total pages: {len(self.documents)}")
         self.log_to_file(f"Total errors: {self.error_count}")
-        self.log_to_file(f"Log file: {self.log_file}")
         
         print(f"\n✅ Crawl complete!")
         print(f"📄 Pages collected: {len(self.documents)}")
-        print(f"⚠️  Errors encountered: {self.error_count}")
-        print(f"📝 Log saved to: {self.log_file}")
+        print(f"⚠️  Errors: {self.error_count}")
+        print(f"📝 Log: {self.log_file}")
         
         return self.documents
-
-if __name__ == "__main__":
-    crawler = RecursiveCrawler("https://www.kluniversity.in", max_depth=2, max_pages=2000)
-    docs = crawler.start()
-    print(f"\nFinal count: {len(docs)} documents.")
