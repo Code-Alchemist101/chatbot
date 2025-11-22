@@ -7,3 +7,8 @@ python-dotenv
 beautifulsoup4
 requests
 langchain
+urllib3
+langchain-huggingface
+langchain-text-splitters
+sentence-transformers
+pinecone-client
