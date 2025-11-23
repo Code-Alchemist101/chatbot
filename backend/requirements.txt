@@ -1,14 +1,13 @@
+sentence-transformers
 flask
 flask-cors
 pymongo
 python-dotenv
 beautifulsoup4
-requests
 langchain
 langchain-google-genai
 langchain-pinecone
 langchain-huggingface
 langchain-text-splitters
-sentence-transformers
 aiohttp
 lxml

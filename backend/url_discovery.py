@@ -60,6 +60,16 @@ class AsyncURLDiscovery:
         
         tasks = []
         
+        # Extensions to skip during discovery
+        skip_extensions = (
+            '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.bmp',  # Images
+            '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',  # Documents
+            '.zip', '.tar', '.gz', '.rar', '.7z',  # Archives
+            '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv',  # Videos
+            '.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac',  # Audio
+            '.css', '.js', '.xml', '.json'  # Code/Data
+        )
+        
         for tag in soup.find_all("a", href=True):
             if len(self.found_urls) >= self.max_urls:
                 break
@@ -75,6 +85,11 @@ class AsyncURLDiscovery:
             
             # Only subdomains of allowed domain
             if not parsed.netloc.endswith(self.allowed_domain):
+                continue
+            
+            # Skip non-HTML files by extension
+            url_lower = new_url.lower()
+            if any(url_lower.endswith(ext) for ext in skip_extensions):
                 continue
             
             # Add to final list
